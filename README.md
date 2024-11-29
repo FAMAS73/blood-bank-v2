@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Decentralized Blood Bank Management System
+
+A blockchain-based blood donation management system built with Next.js, Solidity, and PostgreSQL.
+
+## Features
+
+- **Blockchain Integration**: Secure and transparent tracking of blood donations and requests
+- **Smart Contract**: Automated matching of donors and recipients
+- **User Authentication**: MetaMask wallet integration
+- **Real-time Updates**: Live tracking of blood inventory
+- **Database Integration**: PostgreSQL for storing metadata and supplementary information
+
+## Tech Stack
+
+- **Frontend**: Next.js with Material UI
+- **Blockchain**: Ethereum (Solidity)
+- **Smart Contract Development**: Hardhat
+- **Database**: PostgreSQL with Prisma ORM
+- **Authentication**: Web3 with MetaMask
+- **API**: Next.js API Routes
 
 ## Getting Started
 
-First, run the development server:
-
+1. Clone the repository:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/yourusername/blood-bank.git
+cd blood-bank
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+3. Set up environment variables:
+Create a `.env` file with:
+```
+POSTGRES_URL=your_postgres_url
+NEXT_PUBLIC_CONTRACT_ADDRESS=your_contract_address
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Set up the database:
+```bash
+npx prisma generate
+npx prisma db push
+```
 
-## Learn More
+5. Deploy the smart contract:
+```bash
+npx hardhat compile
+npx hardhat run scripts/deploy.js --network localhost
+```
 
-To learn more about Next.js, take a look at the following resources:
+6. Start the development server:
+```bash
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Smart Contract
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The `BloodDonation.sol` contract handles:
+- Donor registration
+- Blood donation tracking
+- Blood request management
+- Inventory management
+- Automated matching
 
-## Deploy on Vercel
+## Database Schema
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The PostgreSQL database stores:
+- User profiles
+- Donation metadata
+- Request information
+- Inventory tracking
+- Transaction history
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## API Routes
+
+- `/api/users`: User management
+- `/api/donations`: Donation tracking
+- `/api/requests`: Blood requests
+- `/api/inventory`: Blood inventory management
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

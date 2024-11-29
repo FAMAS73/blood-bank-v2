@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_URL")
+}
+
+model User {
+  id              Int           @id @default(autoincrement())
+  address         String        @unique
+  name            String?
+  email           String?       @unique
+  role            UserRole      @default(DONOR)
+  donations       Donation[]
+  bloodRequests   BloodRequest[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Donation {
+  id              Int           @id @default(autoincrement())
+  transactionHash String        @unique
+  donorAddress    String
+  donor           User          @relation(fields: [donorAddress], references: [address])
+  bloodType       String
+  quantity        Int
+  donorName       String
+  age             Int
+  contact         String
+  status          Status        @default(PENDING)
+  inventory       Inventory[]
+  timestamp       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model BloodRequest {
+  id              Int           @id @default(autoincrement())
+  transactionHash String        @unique
+  requesterAddress String
+  requester       User          @relation(fields: [requesterAddress], references: [address])
+  bloodType       String
+  quantity        Int
+  recipientName   String
+  age             Int
+  contact         String
+  hospital        String
+  reason          String
+  status          Status        @default(PENDING)
+  fulfilledBy     String?
+  fulfilledAt     DateTime?
+  inventory       Inventory[]
+  timestamp       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Inventory {
+  id              Int           @id @default(autoincrement())
+  bloodType       String
+  quantity        Int
+  status          InventoryStatus @default(AVAILABLE)
+  expiryDate      DateTime
+  donationId      Int?
+  donation        Donation?     @relation(fields: [donationId], references: [id])
+  requestId       Int?
+  request         BloodRequest? @relation(fields: [requestId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+enum UserRole {
+  ADMIN
+  DONOR
+  HOSPITAL
+}
+
+enum Status {
+  PENDING
+  APPROVED
+  REJECTED
+  FULFILLED
+  CANCELLED
+}
+
+enum InventoryStatus {
+  AVAILABLE
+  RESERVED
+  USED
+  EXPIRED
+}
