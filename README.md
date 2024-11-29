@@ -39,31 +39,86 @@ POSTGRES_URL=your_postgres_url
 NEXT_PUBLIC_CONTRACT_ADDRESS=your_contract_address
 ```
 
-4. Set up the database:
-```bash
-npx prisma generate
-npx prisma db push
-```
+## Hardhat and MetaMask Setup
 
-5. Deploy the smart contract:
-```bash
-npx hardhat compile
-npx hardhat run scripts/deploy.js --network localhost
-```
+1. Install MetaMask:
+   - Install the [MetaMask browser extension](https://metamask.io/download/)
+   - Create a new wallet or import an existing one
+   - Keep your seed phrase secure and never share it
 
-6. Start the development server:
-```bash
-npm run dev
-```
+2. Configure Hardhat Local Network:
+   ```bash
+   # Start Hardhat node (local blockchain)
+   npx hardhat node
+   ```
+   This will start a local Ethereum network and provide you with test accounts and their private keys.
 
-## Smart Contract
+3. Add Hardhat Network to MetaMask:
+   - Open MetaMask
+   - Click the network dropdown (usually shows "Ethereum Mainnet")
+   - Click "Add Network"
+   - Add these details:
+     - Network Name: Hardhat Local
+     - New RPC URL: http://127.0.0.1:8545
+     - Chain ID: 31337
+     - Currency Symbol: ETH
 
-The `BloodDonation.sol` contract handles:
-- Donor registration
-- Blood donation tracking
-- Blood request management
-- Inventory management
-- Automated matching
+4. Import a Test Account:
+   - Copy a private key from the Hardhat node output
+   - In MetaMask, click your account icon
+   - Select "Import Account"
+   - Paste the private key and click "Import"
+   This account will have test ETH for transactions.
+
+5. Deploy Smart Contract:
+   ```bash
+   # Compile the contract
+   npx hardhat compile
+
+   # Deploy to local network
+   npx hardhat run scripts/deploy.js --network localhost
+   ```
+   Save the deployed contract address to your .env file as NEXT_PUBLIC_CONTRACT_ADDRESS
+
+6. Start the Development Server:
+   ```bash
+   npm run dev
+   ```
+
+## Understanding the Blockchain Implementation
+
+### How It Works
+
+1. **Smart Contract (BloodDonation.sol)**:
+   - Acts as the decentralized database for blood donations
+   - Manages blood inventory on the blockchain
+   - Handles donor and recipient matching
+   - Ensures transparency and immutability of records
+
+2. **Transaction Flow**:
+   - When a donor submits blood: 
+     1. MetaMask prompts for transaction approval
+     2. Smart contract records the donation
+     3. Updates the blood inventory
+     4. Emits events for frontend updates
+   
+   - When someone requests blood:
+     1. Contract checks availability
+     2. If matched, creates a request record
+     3. Updates inventory automatically
+     4. Notifies relevant parties
+
+3. **Blockchain Benefits**:
+   - **Immutability**: All records are permanent and cannot be altered
+   - **Transparency**: Anyone can verify the blood donation history
+   - **Security**: Cryptographic security for all transactions
+   - **Traceability**: Complete audit trail of all donations and requests
+
+4. **Integration Points**:
+   - Frontend connects via Web3.js/ethers.js
+   - MetaMask handles transaction signing
+   - Events provide real-time updates
+   - PostgreSQL stores supplementary data
 
 ## Database Schema
 
@@ -80,6 +135,23 @@ The PostgreSQL database stores:
 - `/api/donations`: Donation tracking
 - `/api/requests`: Blood requests
 - `/api/inventory`: Blood inventory management
+
+## Troubleshooting
+
+1. **MetaMask Connection Issues**:
+   - Ensure you're on the correct network (Hardhat Local)
+   - Reset your account if transactions are stuck
+   - Make sure your test account has enough ETH
+
+2. **Smart Contract Deployment**:
+   - If deployment fails, ensure Hardhat node is running
+   - Check if you have enough test ETH
+   - Verify network configuration in hardhat.config.js
+
+3. **Transaction Errors**:
+   - Check MetaMask gas settings
+   - Ensure contract address in .env is correct
+   - Verify you're using the right account
 
 ## Contributing
 
