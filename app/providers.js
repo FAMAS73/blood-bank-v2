@@ -2,10 +2,10 @@
 
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import BloodDonation from './artifacts/contracts/BloodDonation.sol/BloodDonation.json';
-import { Snackbar, Alert, Button, Link, Dialog, DialogTitle, DialogContent, DialogActions, Typography } from '@mui/material';
+import { detectMetaMask } from './utils/web3';
 
 const Web3Context = createContext();
 
@@ -21,58 +21,109 @@ const theme = createTheme({
   },
 });
 
-const EXPECTED_CHAIN_ID = '0x539'; // Chain ID for localhost:8545
-const LOCAL_NETWORK_PARAMS = {
-  chainId: '0x539',
-  chainName: 'Localhost 8545',
+// Hardhat's default chain ID is 31337 (0x7A69)
+const EXPECTED_CHAIN_ID = '0x7A69';
+const LOCAL_NETWORK = {
+  chainId: EXPECTED_CHAIN_ID,
+  chainName: 'Hardhat Local',
   nativeCurrency: {
     name: 'ETH',
     symbol: 'ETH',
     decimals: 18
   },
-  rpcUrls: ['http://localhost:8545'],
+  rpcUrls: ['http://127.0.0.1:8545']
 };
 
 export function Providers({ children }) {
   const [account, setAccount] = useState(null);
   const [contract, setContract] = useState(null);
-  const [provider, setProvider] = useState(null);
-  const [alert, setAlert] = useState({ open: false, message: '', severity: 'info' });
+  const [networkError, setNetworkError] = useState(null);
   const [isMetaMaskInstalled, setIsMetaMaskInstalled] = useState(false);
-  const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
-  const [showInstallDialog, setShowInstallDialog] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  const checkMetaMask = () => {
-    const isInstalled = typeof window !== 'undefined' && 
-                       typeof window.ethereum !== 'undefined' &&
-                       window.ethereum.isMetaMask;
-    setIsMetaMaskInstalled(isInstalled);
-    return isInstalled;
-  };
+  useEffect(() => {
+    const init = async () => {
+      // Check for MetaMask installation
+      const hasMetaMask = detectMetaMask();
+      setIsMetaMaskInstalled(hasMetaMask);
 
-  const handleInstallMetaMask = () => {
-    window.open('https://metamask.io/download/', '_blank');
-    setShowInstallDialog(true);
-  };
+      if (hasMetaMask) {
+        // Listen for account changes
+        window.ethereum.on('accountsChanged', (accounts) => {
+          if (accounts.length === 0) {
+            setAccount(null);
+            setContract(null);
+          } else {
+            setAccount(accounts[0]);
+            initializeContract(accounts[0]);
+          }
+        });
 
-  const checkNetwork = async () => {
-    if (!window.ethereum) return false;
+        // Listen for chain changes
+        window.ethereum.on('chainChanged', () => {
+          window.location.reload();
+        });
+
+        // Check if already connected
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+          if (accounts.length > 0) {
+            setAccount(accounts[0]);
+            await initializeContract(accounts[0]);
+          }
+        } catch (error) {
+          console.error('Error checking accounts:', error);
+        }
+      }
+
+      setIsInitialized(true);
+    };
+
+    init();
+
+    return () => {
+      if (window.ethereum) {
+        window.ethereum.removeAllListeners('accountsChanged');
+        window.ethereum.removeAllListeners('chainChanged');
+      }
+    };
+  }, []);
+
+  const initializeContract = async (userAccount) => {
+    if (!userAccount) return;
+    
     try {
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
-      const isCorrect = chainId === EXPECTED_CHAIN_ID;
-      setIsCorrectNetwork(isCorrect);
-      return isCorrect;
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+      
+      if (!contractAddress) {
+        throw new Error('Contract address not found in environment variables');
+      }
+
+      const bloodDonation = new ethers.Contract(
+        contractAddress,
+        BloodDonation.abi,
+        signer
+      );
+
+      // Verify contract exists
+      const code = await provider.getCode(contractAddress);
+      if (code === '0x') {
+        throw new Error('Contract not found at the specified address');
+      }
+
+      setContract(bloodDonation);
+      setNetworkError(null);
     } catch (error) {
-      console.error('Error checking network:', error);
-      return false;
+      console.error('Error initializing contract:', error);
+      setNetworkError(error.message);
+      setContract(null);
     }
   };
 
-  const switchToLocalNetwork = async () => {
-    if (!window.ethereum) return false;
-
+  const switchNetwork = async () => {
     try {
-      // Try to switch to the network
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: EXPECTED_CHAIN_ID }],
@@ -84,228 +135,72 @@ export function Providers({ children }) {
         try {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
-            params: [LOCAL_NETWORK_PARAMS],
+            params: [LOCAL_NETWORK],
           });
           return true;
         } catch (addError) {
           console.error('Error adding network:', addError);
-          setAlert({
-            open: true,
-            message: 'Failed to add local network. Please try again.',
-            severity: 'error'
-          });
+          setNetworkError('Please add and select the Hardhat Local network in MetaMask');
           return false;
         }
       }
       console.error('Error switching network:', switchError);
-      setAlert({
-        open: true,
-        message: 'Failed to switch network. Please try again.',
-        severity: 'error'
-      });
+      setNetworkError('Please switch to the Hardhat Local network in MetaMask');
       return false;
     }
   };
 
-  const initializeContract = async (signer) => {
+  const connectWallet = async () => {
+    if (!isMetaMaskInstalled) {
+      window.open('https://metamask.io/download/', '_blank');
+      return;
+    }
+
     try {
-      const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
-      if (!contractAddress) {
-        throw new Error('Contract address not found');
+      // Check network first
+      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      if (chainId !== EXPECTED_CHAIN_ID) {
+        const switched = await switchNetwork();
+        if (!switched) return;
       }
 
-      // Create contract instance
-      const bloodDonation = new ethers.Contract(
-        contractAddress,
-        BloodDonation.abi,
-        signer
-      );
-
-      // Verify contract is deployed
-      const code = await signer.provider.getCode(contractAddress);
-      if (code === '0x') {
-        throw new Error('Contract not deployed');
-      }
-
-      return bloodDonation;
+      // Request account access
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      setAccount(accounts[0]);
+      await initializeContract(accounts[0]);
     } catch (error) {
-      console.error('Contract initialization error:', error);
-      throw new Error('Failed to initialize contract. Please check your connection and try again.');
+      console.error('Error connecting wallet:', error);
+      if (error.code === 4001) {
+        setNetworkError('Please accept the connection request in MetaMask');
+      } else {
+        setNetworkError('Failed to connect wallet. Please try again.');
+      }
     }
   };
 
   const disconnectWallet = () => {
     setAccount(null);
     setContract(null);
-    setProvider(null);
-    setAlert({
-      open: true,
-      message: 'Wallet disconnected',
-      severity: 'info'
-    });
+    setNetworkError(null);
   };
 
-  const connectWallet = async (forceNewAccount = false) => {
-    if (!checkMetaMask()) {
-      handleInstallMetaMask();
-      return;
-    }
-
-    try {
-      const isCorrect = await checkNetwork();
-      if (!isCorrect) {
-        const switched = await switchToLocalNetwork();
-        if (!switched) return;
-      }
-
-      // Request account access
-      const method = forceNewAccount ? 'wallet_requestPermissions' : 'eth_requestAccounts';
-      const params = forceNewAccount ? [{ eth_accounts: {} }] : [];
-      
-      const accounts = forceNewAccount 
-        ? (await window.ethereum.request({ method, params }))
-            .find(p => p.parentCapability === 'eth_accounts')?.caveats[0]?.value
-        : await window.ethereum.request({ method });
-
-      if (!accounts || accounts.length === 0) {
-        throw new Error('No accounts found');
-      }
-
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      
-      // Initialize contract
-      const contract = await initializeContract(signer);
-
-      setAccount(accounts[0]);
-      setContract(contract);
-      setProvider(provider);
-      setAlert({
-        open: true,
-        message: 'Wallet connected successfully!',
-        severity: 'success'
-      });
-    } catch (error) {
-      console.error('Error connecting wallet:', error);
-      setAlert({
-        open: true,
-        message: error.message === 'User rejected the request.'
-          ? 'Connection rejected. Please try again.'
-          : `Failed to connect: ${error.message}`,
-        severity: 'error'
-      });
-    }
-  };
-
-  useEffect(() => {
-    const init = async () => {
-      checkMetaMask();
-
-      if (isMetaMaskInstalled) {
-        // Check network
-        await checkNetwork();
-
-        // Check if already connected
-        try {
-          const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-          if (accounts.length > 0) {
-            connectWallet();
-          }
-        } catch (error) {
-          console.error('Error checking accounts:', error);
-        }
-
-        // Setup event listeners
-        window.ethereum.on('accountsChanged', (accounts) => {
-          if (accounts.length === 0) {
-            setAccount(null);
-            setContract(null);
-            setProvider(null);
-            setAlert({
-              open: true,
-              message: 'Wallet disconnected',
-              severity: 'info'
-            });
-          } else {
-            connectWallet();
-          }
-        });
-
-        window.ethereum.on('chainChanged', () => {
-          window.location.reload();
-        });
-
-        return () => {
-          window.ethereum.removeAllListeners('accountsChanged');
-          window.ethereum.removeAllListeners('chainChanged');
-        };
-      }
-    };
-
-    init();
-  }, [isMetaMaskInstalled]);
-
-  const handleCloseAlert = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setAlert(prev => ({ ...prev, open: false }));
-  };
+  // Don't render until initialization is complete
+  if (!isInitialized) {
+    return null;
+  }
 
   return (
     <Web3Context.Provider value={{ 
       account, 
-      contract, 
-      provider, 
+      contract,
       connectWallet,
       disconnectWallet,
       isMetaMaskInstalled,
-      isCorrectNetwork,
-      switchToLocalNetwork
+      networkError
     }}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
         {children}
-        <Snackbar 
-          open={alert.open} 
-          autoHideDuration={6000} 
-          onClose={handleCloseAlert}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        >
-          <Alert 
-            onClose={handleCloseAlert} 
-            severity={alert.severity}
-            sx={{ width: '100%' }}
-          >
-            {alert.message}
-          </Alert>
-        </Snackbar>
-
-        <Dialog 
-          open={showInstallDialog} 
-          onClose={() => setShowInstallDialog(false)}
-        >
-          <DialogTitle>Installing MetaMask</DialogTitle>
-          <DialogContent>
-            <Typography>
-              MetaMask installation has started in a new tab. After installing:
-              <ol>
-                <li>Complete the MetaMask setup</li>
-                <li>Refresh this page</li>
-                <li>Click &quot;Connect Wallet&quot; to continue</li>
-              </ol>
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setShowInstallDialog(false)}>Close</Button>
-            <Button 
-              onClick={() => window.open('https://metamask.io/download/', '_blank')}
-              variant="contained"
-            >
-              Install MetaMask
-            </Button>
-          </DialogActions>
-        </Dialog>
       </ThemeProvider>
     </Web3Context.Provider>
   );

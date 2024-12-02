@@ -22,27 +22,19 @@ export default function Home() {
     totalDonations: '0',
     totalRequests: '0'
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchStats = async () => {
-      if (!contract || !account) {
-        setLoading(false);
-        return;
-      }
+      if (!contract || !account) return;
 
+      setLoading(true);
       try {
-        // Add delay between calls to avoid rate limiting
         const donors = await contract.getTotalDonors();
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
         const donations = await contract.getTotalDonations();
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
         const requests = await contract.getTotalRequests();
 
-        // Convert BigNumbers to strings
         setStats({
           totalDonors: donors ? ethers.formatUnits(donors, 0) : '0',
           totalDonations: donations ? ethers.formatUnits(donations, 0) : '0',
@@ -51,7 +43,7 @@ export default function Home() {
         setError(null);
       } catch (error) {
         console.error('Error fetching stats:', error);
-        setError('Failed to fetch statistics. Please make sure your wallet is connected and you are on the correct network.');
+        setError('Failed to fetch statistics. Please make sure you are connected to the correct network.');
       } finally {
         setLoading(false);
       }
@@ -61,32 +53,21 @@ export default function Home() {
 
     // Set up event listeners for real-time updates
     if (contract) {
-      try {
-        const donorFilter = contract.filters.DonorRegistered();
-        const donationFilter = contract.filters.BloodDonated();
-        const requestFilter = contract.filters.BloodRequested();
+      const filters = [
+        contract.filters.DonorRegistered(),
+        contract.filters.BloodDonated(),
+        contract.filters.BloodRequested()
+      ];
 
-        const handleEvent = () => {
-          console.log('Event received, updating stats...');
-          fetchStats();
-        };
+      filters.forEach(filter => {
+        contract.on(filter, fetchStats);
+      });
 
-        contract.on(donorFilter, handleEvent);
-        contract.on(donationFilter, handleEvent);
-        contract.on(requestFilter, handleEvent);
-
-        return () => {
-          try {
-            contract.off(donorFilter, handleEvent);
-            contract.off(donationFilter, handleEvent);
-            contract.off(requestFilter, handleEvent);
-          } catch (error) {
-            console.error('Error removing event listeners:', error);
-          }
-        };
-      } catch (error) {
-        console.error('Error setting up event listeners:', error);
-      }
+      return () => {
+        filters.forEach(filter => {
+          contract.off(filter, fetchStats);
+        });
+      };
     }
   }, [contract, account]);
 
